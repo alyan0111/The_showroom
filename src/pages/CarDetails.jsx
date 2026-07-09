@@ -3,6 +3,9 @@ import { useState, useEffect, useCallback } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { api } from "../api/client";
 
+const BACKEND_URL = "http://localhost:5000";
+const resolveUrl = (url) => (url.startsWith("http") ? url : `${BACKEND_URL}${url}`);
+
 const typeColor = {
   Electric: "text-[#00f5ff] bg-[#00f5ff]/10 border-[#00f5ff]/30",
   Hybrid:   "text-[#7b2ff7] bg-[#7b2ff7]/10 border-[#7b2ff7]/30",
@@ -76,7 +79,6 @@ export default function CarDetails() {
   const [error, setError]   = useState(null);
 
   useEffect(() => {
-    // eslint-disable-next-line
     setLoading(true);
     api.getCar(id)
       .then(setCar)
@@ -108,7 +110,15 @@ export default function CarDetails() {
   }
 
   const spec = car.specification || {};
-  const images = car.image_url ? [car.image_url] : ["https://images.unsplash.com/photo-1502877338535-766e1452684a?w=800&q=80"];
+
+  // ── Build carousel images: prefer full gallery from car_images table, ───────
+  // ── fall back to the single main card image, then to a placeholder ─────────
+  const images =
+    car.images && car.images.length > 0
+      ? car.images.map((img) => resolveUrl(img.image_url))
+      : car.image_url
+        ? [resolveUrl(car.image_url)]
+        : ["https://images.unsplash.com/photo-1502877338535-766e1452684a?w=800&q=80"];
 
   const safetyFeatures     = car.features?.filter((f) => f.category === "Safety") || [];
   const comfortFeatures    = car.features?.filter((f) => f.category === "Comfort") || [];

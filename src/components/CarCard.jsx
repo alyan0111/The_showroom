@@ -8,12 +8,21 @@ const typeColor = {
   Petrol:   { badge: "text-[#ff2d9b] bg-[#ff2d9b]/10 border border-[#ff2d9b]/20", glow: "hover:border-[#ff2d9b]/40" },
 };
 
+const BACKEND_URL = "http://localhost:5000";
+
 export default function CarCard({ car, variant = "default" }) {
   const engineType = car.engine_type || car.type;
   const name       = car.model || car.name;
   const colors     = typeColor[engineType] || typeColor.Petrol;
-  const image      = car.image_url || car.image;
   const power      = car.specification?.horsepower || car.power || car.horsepower;
+
+  // ── Resolve image URL ────────────────────────────────────────────────────────
+  // car.image_url comes from the backend as a relative path like "/uploads/cars/xxx.jpg"
+  // car.image / car.image_url as a full URL is also supported for legacy/mock data
+  const rawImage = car.image_url || car.image;
+  const image = rawImage
+    ? (rawImage.startsWith("http") ? rawImage : `${BACKEND_URL}${rawImage}`)
+    : null;
 
   if (variant === "featured") {
     return (
@@ -30,7 +39,9 @@ export default function CarCard({ car, variant = "default" }) {
               }}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-5xl">🚗</div>
+            <div className="w-full h-full flex items-center justify-center">
+              <img src={logo} alt="Logo" className="w-full h-full object-cover" />
+            </div>
           )}
         </div>
         <div className="p-5">
@@ -59,7 +70,9 @@ export default function CarCard({ car, variant = "default" }) {
               }}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-5xl">🚗</div>
+            <div className="w-full h-full flex items-center justify-center">
+              <img src={logo} alt="Logo" className="w-full h-full object-cover" />
+            </div>
           )}
         </div>
         <span className={`text-xs px-2 py-1 rounded-full font-medium ${colors.badge}`}>{engineType}</span>
@@ -87,7 +100,9 @@ export default function CarCard({ car, variant = "default" }) {
             }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-6xl">🚗</div>
+          <div className="w-full h-full flex items-center justify-center">
+            <img src={logo} alt="Logo" className="w-full h-full object-cover" />
+          </div>
         )}
         <span className={`absolute top-3 left-3 text-xs px-2 py-1 rounded-full font-medium backdrop-blur-sm ${colors.badge}`}>
           {engineType}

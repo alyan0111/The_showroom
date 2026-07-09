@@ -1,5 +1,6 @@
 import useEmblaCarousel from "embla-carousel-react";
 import { useCallback, useState, useEffect } from "react";
+import logo from "../assets/logo.png";
 
 // ─── Carousel Component ───────────────────────────────────────────────────────
 function CarCarousel({ images }) {
@@ -23,12 +24,8 @@ function CarCarousel({ images }) {
                 alt={`Car view ${i + 1}`}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  e.target.style.display = "none";
-                  e.target.parentElement.classList.add(
-                    "bg-gradient-to-br",
-                    "from-[#1a1a4e]",
-                    "to-[#05051a]"
-                  );
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = logo;
                 }}
               />
               {/* Gradient overlay */}
@@ -107,4 +104,5 @@ function DotIndicators({ emblaApi, count }) {
     </div>
   );
 }
+
 export default CarCarousel;

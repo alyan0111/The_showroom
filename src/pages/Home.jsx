@@ -19,6 +19,7 @@ const reasons = [
 export default function Home() {
   const [featuredCars, setFeaturedCars] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showHeroBackground, setShowHeroBackground] = useState(true);
 
   useEffect(() => {
     api.getCars()
@@ -29,13 +30,29 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const heroSection = document.getElementById("home-hero");
+    if (!heroSection) return undefined;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowHeroBackground(entry.isIntersecting || entry.intersectionRatio > 0);
+      },
+      { threshold: 0.15 }
+    );
+
+    observer.observe(heroSection);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="pt-0">
       {/* Hero — unchanged */}
-      <section className="relative w-full h-screen overflow-hidden">
+      <section id="home-hero" className="relative w-full h-screen overflow-hidden">
         <div className="absolute inset-0 w-full h-full">
-          <Hyperspeed
-            effectOptions={{
+          {showHeroBackground && (
+            <Hyperspeed
+              effectOptions={{
               onSpeedUp: () => {},
               onSlowDown: () => {},
               distortion: "turbulentDistortion",
@@ -71,8 +88,9 @@ export default function Home() {
                 rightCars: [0x00f5ff, 0x00bcd4, 0x0ef6ff],
                 sticks: 0xff2d9b,
               },
-            }}
-          />
+              }}
+            />
+          )}
         </div>
 
         <div className="absolute z-10 text-white text-center top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl px-4">

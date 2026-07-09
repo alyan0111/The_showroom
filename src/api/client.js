@@ -16,6 +16,20 @@ async function request(endpoint, options = {}) {
   return res.json();
 }
 
+// Separate helper for FormData uploads (no Content-Type header — browser sets it with boundary)
+async function uploadRequest(endpoint, formData) {
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
+    method: "POST",
+    body: formData,
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Upload failed" }));
+    throw new Error(err.error || "Upload failed");
+  }
+  return res.json();
+}
+
 export const api = {
   getManufacturers: () => request("/manufacturers"),
   createManufacturer: (data) => request("/manufacturers", { method: "POST", body: JSON.stringify(data) }),
@@ -31,6 +45,7 @@ export const api = {
   getCar: (id) => request(`/cars/${id}`),
   createCar: (data) => request("/cars", { method: "POST", body: JSON.stringify(data) }),
   updateCar: (id, data) => request(`/cars/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  updateCarSpecification: (id, data) => request(`/cars/${id}/specification`, { method: "PUT", body: JSON.stringify(data) }),
   deleteCar: (id) => request(`/cars/${id}`, { method: "DELETE" }),
   addCarFeature: (carId, featureId) => request(`/cars/${carId}/features/${featureId}`, { method: "POST" }),
   removeCarFeature: (carId, featureId) => request(`/cars/${carId}/features/${featureId}`, { method: "DELETE" }),
@@ -44,5 +59,21 @@ export const api = {
   sendMessage: (data) => request("/messages", { method: "POST", body: JSON.stringify(data) }),
   markMessageRead: (id) => request(`/messages/${id}/read`, { method: "PATCH" }),
   deleteMessage: (id) => request(`/messages/${id}`, { method: "DELETE" }),
-  updateCarSpecification: (id, data) => request(`/cars/${id}/specification`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // ── Image uploads ────────────────────────────────────────────────────────────
+  uploadMainImage: (file) => {
+    const fd = new FormData();
+    fd.append("image", file);
+    return uploadRequest("/upload/main", fd);
+  },
+  uploadCarouselImages: (files) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("images", f));
+    return uploadRequest("/upload/carousel", fd);
+  },
+  attachCarImages: (carId, urls) =>
+    request(`/upload/cars/${carId}/images`, { method: "POST", body: JSON.stringify({ urls }) }),
+  getCarImages: (carId) => request(`/upload/cars/${carId}/images`),
+  deleteCarImage: (carId, imageId) =>
+    request(`/upload/cars/${carId}/images/${imageId}`, { method: "DELETE" }),
 };

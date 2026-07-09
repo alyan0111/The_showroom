@@ -249,6 +249,7 @@ function Manufacturers({ data, refresh, showToast }) {
 }
 
 // ── Cars Panel ────────────────────────────────────────────────────────────────
+// ── Cars Panel ────────────────────────────────────────────────────────────────
 function Cars({ data, manufacturers, refresh, showToast }) {
   const [modal, setModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -256,7 +257,6 @@ function Cars({ data, manufacturers, refresh, showToast }) {
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ── Features — fetched fresh every time the modal opens ────────────────────
   const [allFeatures, setAllFeatures] = useState([]);
   const [featuresLoading, setFeaturesLoading] = useState(false);
   const [selectedFeatureIds, setSelectedFeatureIds] = useState([]);
@@ -272,6 +272,15 @@ function Cars({ data, manufacturers, refresh, showToast }) {
   });
   const [spec, setSpec] = useState(emptySpec);
 
+  // ── Image state ──────────────────────────────────────────────────────────────
+  const [mainImageFile, setMainImageFile] = useState(null);   // File object staged for upload
+  const [mainImagePreview, setMainImagePreview] = useState(null); // preview URL (blob or server URL)
+  const [mainImageUploading, setMainImageUploading] = useState(false);
+
+  const [carouselFiles, setCarouselFiles] = useState([]);      // File[] staged for upload
+  const [carouselPreviews, setCarouselPreviews] = useState([]); // { url, isNew, imageId? }[]
+  const [carouselUploading, setCarouselUploading] = useState(false);
+
   const loadFeatures = async () => {
     setFeaturesLoading(true);
     try {
@@ -284,12 +293,20 @@ function Cars({ data, manufacturers, refresh, showToast }) {
     }
   };
 
+  const resetImageState = () => {
+    setMainImageFile(null);
+    setMainImagePreview(null);
+    setCarouselFiles([]);
+    setCarouselPreviews([]);
+  };
+
   const openAdd = async () => {
     setForm({ manufacturer_id: manufacturers[0]?.manufacturer_id || "", model: "", year: "", type: "Petrol", price: "", body_type: "Sedan", transmission: "Automatic" });
     setSpec(emptySpec);
     setEditing(null);
     setSelectedFeatureIds([]);
     setOriginalFeatureIds([]);
+    resetImageState();
     setModal("form");
     await loadFeatures();
   };
@@ -297,6 +314,7 @@ function Cars({ data, manufacturers, refresh, showToast }) {
   const openEdit = async (c) => {
     setForm({ manufacturer_id: c.manufacturer_id, model: c.model, year: c.year, type: c.engine_type, price: c.price, body_type: c.body_type, transmission: c.transmission });
     setEditing(c.car_id);
+    resetImageState();
     setModal("form");
     await loadFeatures();
 
@@ -309,16 +327,24 @@ function Cars({ data, manufacturers, refresh, showToast }) {
 
       const s = fullCar.specification || {};
       setSpec({
-        engine: s.engine || "",
-        horsepower: s.horsepower || "",
-        torque: s.torque || "",
-        drivetrain: s.drivetrain || "",
-        fuel_economy: s.fuel_economy || "",
-        acceleration: s.acceleration || "",
-        top_speed: s.top_speed || "",
-        seating: s.seating || "",
-        weight: s.weight || "",
+        engine: s.engine || "", horsepower: s.horsepower || "", torque: s.torque || "",
+        drivetrain: s.drivetrain || "", fuel_economy: s.fuel_economy || "",
+        acceleration: s.acceleration || "", top_speed: s.top_speed || "",
+        seating: s.seating || "", weight: s.weight || "",
       });
+
+      // Existing main image preview
+      if (fullCar.image_url) {
+        setMainImagePreview(`http://localhost:5000${fullCar.image_url}`);
+      }
+
+      // Existing carousel images
+      const existingImages = (fullCar.images || []).map((img) => ({
+        url: `http://localhost:5000${img.image_url}`,
+        isNew: false,
+        imageId: img.image_id,
+      }));
+      setCarouselPreviews(existingImages);
     } catch {
       setSelectedFeatureIds([]);
       setOriginalFeatureIds([]);
@@ -332,10 +358,61 @@ function Cars({ data, manufacturers, refresh, showToast }) {
     );
   };
 
+  // ── Main image handlers ──────────────────────────────────────────────────────
+  const handleMainImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setMainImageFile(file);
+    setMainImagePreview(URL.createObjectURL(file));
+  };
+
+  const removeMainImage = () => {
+    setMainImageFile(null);
+    setMainImagePreview(null);
+  };
+
+  // ── Carousel image handlers ──────────────────────────────────────────────────
+  const handleCarouselSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setCarouselFiles((prev) => [...prev, ...files]);
+    const newPreviews = files.map((f) => ({ url: URL.createObjectURL(f), isNew: true }));
+    setCarouselPreviews((prev) => [...prev, ...newPreviews]);
+    e.target.value = ""; // allow re-selecting the same file
+  };
+
+  const removeCarouselImage = async (index, preview) => {
+    if (!preview.isNew && preview.imageId && editing) {
+      // Existing image on server — delete via API immediately
+      try {
+        await api.deleteCarImage(editing, preview.imageId);
+        showToast("Image removed.", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+        return;
+      }
+    } else if (preview.isNew) {
+      // New unsaved file — just remove it from staged files array
+      const newFileIndex = carouselPreviews.slice(0, index).filter((p) => p.isNew).length;
+      setCarouselFiles((prev) => prev.filter((_, i) => i !== newFileIndex));
+    }
+    setCarouselPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSave = async () => {
     if (!form.model.trim() || !form.year || !form.price) return;
     setSaving(true);
     try {
+      // ── Upload main image first if a new file was selected ──────────────────
+      let imageUrl = null;
+      if (mainImageFile) {
+        setMainImageUploading(true);
+        const { url } = await api.uploadMainImage(mainImageFile);
+        imageUrl = url;
+        setMainImageUploading(false);
+      }
+
       const payload = {
         manufacturer_id: Number(form.manufacturer_id),
         model: form.model,
@@ -344,6 +421,7 @@ function Cars({ data, manufacturers, refresh, showToast }) {
         body_type: form.body_type,
         engine_type: form.type,
         transmission: form.transmission,
+        ...(imageUrl ? { image_url: imageUrl } : {}),
       };
 
       const specPayload = {
@@ -358,9 +436,12 @@ function Cars({ data, manufacturers, refresh, showToast }) {
         weight: spec.weight || null,
       };
 
+      let carId;
+
       if (editing) {
         await api.updateCar(editing, payload);
         await api.updateCarSpecification(editing, specPayload);
+        carId = editing;
 
         const toAdd    = selectedFeatureIds.filter((id) => !originalFeatureIds.includes(id));
         const toRemove = originalFeatureIds.filter((id) => !selectedFeatureIds.includes(id));
@@ -373,19 +454,30 @@ function Cars({ data, manufacturers, refresh, showToast }) {
         showToast("Car updated!", "success");
       } else {
         const created = await api.createCar({ ...payload, specification: specPayload });
-        const carId = created.car_id;
+        carId = created.car_id;
 
         await Promise.all(selectedFeatureIds.map((fid) => api.addCarFeature(carId, fid)));
 
         showToast("Car added!", "success");
       }
 
+      // ── Upload new carousel files and attach their URLs ──────────────────────
+      if (carouselFiles.length > 0) {
+        setCarouselUploading(true);
+        const { urls } = await api.uploadCarouselImages(carouselFiles);
+        await api.attachCarImages(carId, urls);
+        setCarouselUploading(false);
+      }
+
       setModal(null);
+      resetImageState();
       refresh();
     } catch (err) {
       showToast(err.message, "error");
     } finally {
       setSaving(false);
+      setMainImageUploading(false);
+      setCarouselUploading(false);
     }
   };
 
@@ -412,9 +504,7 @@ function Cars({ data, manufacturers, refresh, showToast }) {
   }, {});
 
   const categoryTextColor = {
-    Safety:     "text-[#00f5ff]",
-    Comfort:    "text-[#7b2ff7]",
-    Technology: "text-[#ff2d9b]",
+    Safety: "text-[#00f5ff]", Comfort: "text-[#7b2ff7]", Technology: "text-[#ff2d9b]",
   };
 
   return (
@@ -508,6 +598,76 @@ function Cars({ data, manufacturers, refresh, showToast }) {
             <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="55000" />
           </Field>
 
+          {/* ── Main Card Image ── */}
+          <p className="text-xs font-semibold text-[#00f5ff] uppercase tracking-wider pt-2 border-t border-white/5">
+            Main Card Image
+          </p>
+          <p className="text-gray-500 text-xs -mt-2">
+            Shown on car cards across Explore, Home, and Compare pages.
+          </p>
+
+          <div className="flex items-center gap-4">
+            <div className="w-24 h-24 rounded-xl border border-[#00f5ff]/20 bg-[#0a0a2e] flex items-center justify-center overflow-hidden shrink-0">
+              {mainImagePreview ? (
+                <img src={mainImagePreview} alt="Main preview" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-3xl">🚗</span>
+              )}
+            </div>
+            <div className="flex-1 space-y-2">
+              <label className="inline-block px-4 py-2 bg-[#0a0a2e] border border-[#00f5ff]/30 text-[#00f5ff] rounded-lg text-xs font-medium cursor-pointer hover:bg-[#00f5ff]/10 transition">
+                {mainImagePreview ? "Change Image" : "Choose Image"}
+                <input type="file" accept="image/*" onChange={handleMainImageSelect} className="hidden" />
+              </label>
+              {mainImagePreview && (
+                <button onClick={removeMainImage} className="ml-2 text-xs text-red-400 hover:underline">
+                  Remove
+                </button>
+              )}
+              <p className="text-gray-600 text-xs">JPEG, PNG, or WEBP. Max 5MB.</p>
+            </div>
+          </div>
+
+          {/* ── Carousel Images ── */}
+          <p className="text-xs font-semibold text-[#7b2ff7] uppercase tracking-wider pt-2 border-t border-white/5">
+            Car Details Carousel
+          </p>
+          <p className="text-gray-500 text-xs -mt-2">
+            Multiple images shown in the image carousel on the Car Details page.
+          </p>
+
+          <div>
+            <label className="inline-block px-4 py-2 bg-[#0a0a2e] border border-[#7b2ff7]/30 text-[#7b2ff7] rounded-lg text-xs font-medium cursor-pointer hover:bg-[#7b2ff7]/10 transition">
+              + Add Images
+              <input type="file" accept="image/*" multiple onChange={handleCarouselSelect} className="hidden" />
+            </label>
+
+            {carouselPreviews.length > 0 && (
+              <div className="grid grid-cols-4 gap-2 mt-3">
+                {carouselPreviews.map((preview, idx) => (
+                  <div key={idx} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                    <img src={preview.url} alt={`Carousel ${idx + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      onClick={() => removeCarouselImage(idx, preview)}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white text-xs
+                                 flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-red-500"
+                    >
+                      ✕
+                    </button>
+                    {preview.isNew && (
+                      <span className="absolute bottom-1 left-1 text-[9px] bg-[#7b2ff7]/80 text-white px-1.5 py-0.5 rounded-full">
+                        New
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {carouselPreviews.length === 0 && (
+              <p className="text-gray-600 text-xs mt-2">No carousel images added yet.</p>
+            )}
+          </div>
+
           {/* ── Specifications ── */}
           <p className="text-xs font-semibold text-[#00f5ff] uppercase tracking-wider pt-2 border-t border-white/5">
             Specifications
@@ -566,9 +726,7 @@ function Cars({ data, manufacturers, refresh, showToast }) {
               <div className="w-5 h-5 border-2 border-[#ff2d9b] border-t-transparent rounded-full animate-spin" />
             </div>
           ) : allFeatures.length === 0 ? (
-            <p className="text-gray-500 text-xs py-2">
-              No features exist yet. Add some in the Features tab first.
-            </p>
+            <p className="text-gray-500 text-xs py-2">No features exist yet. Add some in the Features tab first.</p>
           ) : (
             <div className="space-y-4 max-h-64 overflow-y-auto pr-1 border border-[#00f5ff]/10 rounded-xl p-4 bg-[#0a0a2e]">
               {Object.entries(featuresByCategory).map(([category, catFeatures]) => (
@@ -578,20 +736,13 @@ function Cars({ data, manufacturers, refresh, showToast }) {
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     {catFeatures.map((f) => (
-                      <label
-                        key={f.feature_id}
+                      <label key={f.feature_id}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer transition
                           ${selectedFeatureIds.includes(f.feature_id)
                             ? "border-[#ff2d9b]/40 bg-white/5 text-white"
-                            : "border-white/10 text-gray-400 hover:border-white/20"
-                          }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedFeatureIds.includes(f.feature_id)}
-                          onChange={() => toggleFeature(f.feature_id)}
-                          className="accent-[#ff2d9b]"
-                        />
+                            : "border-white/10 text-gray-400 hover:border-white/20"}`}>
+                        <input type="checkbox" checked={selectedFeatureIds.includes(f.feature_id)}
+                          onChange={() => toggleFeature(f.feature_id)} className="accent-[#ff2d9b]" />
                         {f.name}
                       </label>
                     ))}
@@ -602,8 +753,13 @@ function Cars({ data, manufacturers, refresh, showToast }) {
           )}
 
           <div className="flex gap-3 pt-1">
-            <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-[#ff2d9b] text-white rounded-xl text-sm font-semibold hover:bg-[#e91e8c] transition disabled:opacity-60">
-              {saving ? "Saving..." : editing ? "Save Changes" : "Add Car"}
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 py-2.5 bg-[#ff2d9b] text-white rounded-xl text-sm font-semibold hover:bg-[#e91e8c] transition disabled:opacity-60">
+              {saving
+                ? mainImageUploading ? "Uploading main image..."
+                : carouselUploading ? "Uploading carousel images..."
+                : "Saving..."
+                : editing ? "Save Changes" : "Add Car"}
             </button>
             <button onClick={() => setModal(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition">
               Cancel

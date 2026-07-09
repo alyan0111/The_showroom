@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../database/database");
 
+
+
 // ── Helper: full car with joins ─────────────────────────────────────────────
 async function getFullCar(carId) {
   const [carRows] = await pool.query(`
@@ -14,9 +16,7 @@ async function getFullCar(carId) {
   if (carRows.length === 0) return null;
   const car = carRows[0];
 
-  const [specRows] = await pool.query(
-    `SELECT * FROM specifications WHERE car_id = ?`, [carId]
-  );
+  const [specRows] = await pool.query(`SELECT * FROM specifications WHERE car_id = ?`, [carId]);
 
   const [features] = await pool.query(`
     SELECT f.feature_id, f.name, f.category
@@ -25,7 +25,12 @@ async function getFullCar(carId) {
     WHERE cf.car_id = ?
   `, [carId]);
 
-  return { ...car, specification: specRows[0] || null, features };
+  // ── NEW: fetch carousel images ─────────────────────────────────────────────
+  const [images] = await pool.query(
+    `SELECT * FROM car_images WHERE car_id = ? ORDER BY sort_order ASC`, [carId]
+  );
+
+  return { ...car, specification: specRows[0] || null, features, images };
 }
 
 // GET all — with filters
