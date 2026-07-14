@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import CarCard from "../components/CarCard";
 
@@ -33,32 +34,53 @@ export default function Compare() {
   const [carC, setCarC] = useState(null);
   const [showThird, setShowThird] = useState(false);
 
-  // Detail cache — full spec data fetched per selected car
   const [details, setDetails] = useState({});
+  const fetchedIds = useRef(new Set());
 
   useEffect(() => {
+    let cancelled = false;
+
     api.getCars()
       .then((data) => {
+        if (cancelled) return;
         setAllCars(data);
         if (data.length >= 3) {
           setCarA(data[0]);
           setCarB(data[2]);
         }
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Fetch full detail (with specs) whenever a car is selected
+  // ── Fetch full spec detail for each selected car ────────────────────────────
+  // ── fetchedIds ref tracks what's already been requested, so this effect ─────
+  // ── doesn't need `details` in its dependency array — avoiding the warning ───
+  // ── and avoiding any risk of an infinite fetch loop. ────────────────────────
   useEffect(() => {
     [carA, carB, carC].filter(Boolean).forEach((car) => {
-      if (!details[car.car_id]) {
-        api.getCar(car.car_id).then((full) => {
+      if (fetchedIds.current.has(car.car_id)) return;
+      fetchedIds.current.add(car.car_id);
+
+      api.getCar(car.car_id)
+        .then((full) => {
           setDetails((prev) => ({ ...prev, [car.car_id]: full }));
-        }).catch(() => {});
-      }
+        })
+        .catch(() => {
+          fetchedIds.current.delete(car.car_id); // allow retry if it failed
+        });
     });
-  }, [carA, carB, carC, details]);
+  }, [carA, carB, carC]);
 
   const selected = [carA, carB, carC].filter(Boolean);
   const selectedFull = selected.map((c) => details[c.car_id] || c);
@@ -70,7 +92,7 @@ export default function Compare() {
   };
 
   const specRows = [
-    { label: "Price", key: "price",        source: "root",  format: (v) => `$${Number(v).toLocaleString()}`, numeric: true, lowerBetter: true },
+    { label: "Price",        key: "price",        source: "root",  format: (v) => `$${Number(v).toLocaleString()}`, numeric: true, lowerBetter: true },
     { label: "Year",         key: "year",         source: "root",  format: (v) => v, numeric: true, lowerBetter: false },
     { label: "Engine",       key: "engine",        source: "spec",  format: (v) => v || "—", numeric: false },
     { label: "Horsepower",   key: "horsepower",    source: "spec",  format: (v) => v || "—", numeric: true, lowerBetter: false },
@@ -86,6 +108,33 @@ export default function Compare() {
 
   const getValue = (car, row) =>
     row.source === "spec" ? car.specification?.[row.key] : car[row.key];
+
+  const getWinner = () => {
+    if (selectedFull.length < 2) return null;
+
+    const scores = selectedFull.map((car) => ({ car, wins: 0 }));
+
+    specRows.forEach((row) => {
+      if (!row.numeric) return;
+      const bestVal = getBest(row.key, row.lowerBetter);
+      if (bestVal === null) return;
+
+      selectedFull.forEach((car, i) => {
+        const raw = row.source === "root" ? car[row.key] : car.specification?.[row.key];
+        const numVal = parseFloat(raw);
+        if (numVal === bestVal) scores[i].wins += 1;
+      });
+    });
+
+    const maxWins = Math.max(...scores.map((s) => s.wins));
+    const leaders = scores.filter((s) => s.wins === maxWins);
+    if (leaders.length !== 1 || maxWins === 0) return null;
+
+    return leaders[0];
+  };
+
+  const winner = getWinner();
+  const totalNumericRows = specRows.filter((r) => r.numeric).length;
 
   if (loading) {
     return (
@@ -198,6 +247,31 @@ export default function Compare() {
                 </table>
               </div>
             </div>
+
+            {winner ? (
+              <div className="bg-gradient-to-r from-[#ff2d9b]/10 to-[#00f5ff]/10
+                              border border-[#ff2d9b]/30 rounded-2xl p-6 text-center">
+                <p className="text-gray-400 text-sm mb-1">Overall Recommended Pick</p>
+                <p className="text-2xl font-bold text-white">{winner.car.model}</p>
+                <p className="text-[#00f5ff] text-sm mt-1">
+                  Best value in {winner.wins} of {totalNumericRows} measured specs
+                </p>
+                <Link
+                  to={`/cars/${winner.car.car_id}`}
+                  className="mt-4 inline-block px-6 py-2 bg-[#ff2d9b] text-white
+                             rounded-lg hover:bg-[#e91e8c] transition text-sm font-semibold
+                             shadow-[0_0_20px_#ff2d9b40]"
+                >
+                  View {winner.car.model} →
+                </Link>
+              </div>
+            ) : (
+              <div className="bg-[#0d0d3b] border border-white/10 rounded-2xl p-6 text-center">
+                <p className="text-gray-400 text-sm">
+                  These vehicles are too evenly matched to declare a clear winner — check the BEST tags above to see category leaders.
+                </p>
+              </div>
+            )}
           </>
         )}
 

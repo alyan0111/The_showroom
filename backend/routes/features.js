@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../database/database");
+const { requireAuth } = require("../middleware/auth");
 
 router.get("/", async (req, res, next) => {
   try {
@@ -16,7 +17,7 @@ router.get("/", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/",requireAuth, async (req, res, next) => {
   try {
     const { name, category } = req.body;
     if (!name || !category) return res.status(400).json({ error: "name and category are required." });
@@ -31,7 +32,7 @@ router.post("/", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put("/:id", async (req, res, next) => {
+router.put("/:id",requireAuth, async (req, res, next) => {
   try {
     const [existingRows] = await pool.query(`SELECT * FROM features WHERE feature_id = ?`, [req.params.id]);
     if (existingRows.length === 0) return res.status(404).json({ error: "Feature not found." });
@@ -49,7 +50,7 @@ router.put("/:id", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id",requireAuth, async (req, res, next) => {
   try {
     const [result] = await pool.query(`DELETE FROM features WHERE feature_id = ?`, [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: "Feature not found." });

@@ -1,11 +1,29 @@
 const BASE_URL = "http://localhost:5000/api";
 
+function getToken() {
+  return localStorage.getItem("admin_token");
+}
+
+
 async function request(endpoint, options = {}) {
+  const token = getToken();
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
   const res = await fetch(`${BASE_URL}${endpoint}`, {
-    headers: { "Content-Type": "application/json" },
     cache: "no-store",
     ...options,
+    headers,
   });
+
+  if (res.status === 401) {
+    localStorage.removeItem("admin_token");
+    window.location.href = "/admin/login";
+    throw new Error("Session expired. Please log in again.");
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));
@@ -16,13 +34,21 @@ async function request(endpoint, options = {}) {
   return res.json();
 }
 
-// Separate helper for FormData uploads (no Content-Type header — browser sets it with boundary)
 async function uploadRequest(endpoint, formData) {
+  const token = getToken();
   const res = await fetch(`${BASE_URL}${endpoint}`, {
     method: "POST",
     body: formData,
     cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
+
+  if (res.status === 401) {
+    localStorage.removeItem("admin_token");
+    window.location.href = "/admin/login";
+    throw new Error("Session expired. Please log in again.");
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Upload failed" }));
     throw new Error(err.error || "Upload failed");
@@ -60,7 +86,6 @@ export const api = {
   markMessageRead: (id) => request(`/messages/${id}/read`, { method: "PATCH" }),
   deleteMessage: (id) => request(`/messages/${id}`, { method: "DELETE" }),
 
-  // ── Image uploads ────────────────────────────────────────────────────────────
   uploadMainImage: (file) => {
     const fd = new FormData();
     fd.append("image", file);
@@ -76,4 +101,9 @@ export const api = {
   getCarImages: (carId) => request(`/upload/cars/${carId}/images`),
   deleteCarImage: (carId, imageId) =>
     request(`/upload/cars/${carId}/images/${imageId}`, { method: "DELETE" }),
+
+  changePassword: (data) => request("/auth/change-password", { method: "PUT", body: JSON.stringify(data) }),
+getAdmins: () => request("/auth/admins"),
+createAdmin: (data) => request("/auth/admins", { method: "POST", body: JSON.stringify(data) }),
+deleteAdmin: (id) => request(`/auth/admins/${id}`, { method: "DELETE" }),
 };

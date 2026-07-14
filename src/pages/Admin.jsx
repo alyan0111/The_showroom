@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
-
+import { useAuth } from "../context/useAuth";
 const typeColor = {
   Electric: "text-[#00f5ff] bg-[#00f5ff]/10",
   Hybrid:   "text-[#7b2ff7] bg-[#7b2ff7]/10",
@@ -18,6 +18,7 @@ const menuItems = [
   { id: "cars",          icon: "🚗", label: "Cars" },
   { id: "features",      icon: "✦",  label: "Features" },
   { id: "messages",      icon: "✉",  label: "Messages" },
+  { id: "admins", icon: "🔐", label: "Admins" },
 ];
 
 function Field({ label, children }) {
@@ -248,7 +249,6 @@ function Manufacturers({ data, refresh, showToast }) {
   );
 }
 
-// ── Cars Panel ────────────────────────────────────────────────────────────────
 // ── Cars Panel ────────────────────────────────────────────────────────────────
 function Cars({ data, manufacturers, refresh, showToast }) {
   const [modal, setModal] = useState(null);
@@ -978,6 +978,221 @@ function Messages({ showToast }) {
   );
 }
 
+// ── Admins Panel ──────────────────────────────────────────────────────────────
+function AdminsPanel({ showToast }) {
+  const { admin: currentAdmin } = useAuth();
+  const [admins, setAdmins] = useState([]);
+  const [loading, setLoading] = useState(true); // starts true — we always fetch on mount
+  const [modal, setModal] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const [newAdminForm, setNewAdminForm] = useState({ name: "", email: "", password: "" });
+  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwError, setPwError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getAdmins()
+      .then((data) => {
+        if (!cancelled) setAdmins(data);
+      })
+      .catch((err) => {
+        if (!cancelled) showToast(err.message, "error");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshAdmins = () => {
+    setLoading(true);
+    api.getAdmins()
+      .then(setAdmins)
+      .catch((err) => showToast(err.message, "error"))
+      .finally(() => setLoading(false));
+  };
+
+  const handleAddAdmin = async () => {
+    if (!newAdminForm.name.trim() || !newAdminForm.email.trim() || newAdminForm.password.length < 8) {
+      showToast("Please fill all fields. Password must be at least 8 characters.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.createAdmin(newAdminForm);
+      showToast("Admin created!", "success");
+      setModal(null);
+      setNewAdminForm({ name: "", email: "", password: "" });
+      refreshAdmins();
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setPwError("");
+    if (pwForm.newPassword.length < 8) {
+      setPwError("New password must be at least 8 characters.");
+      return;
+    }
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      setPwError("New password and confirmation do not match.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.changePassword({
+        currentPassword: pwForm.currentPassword,
+        newPassword: pwForm.newPassword,
+      });
+      showToast("Password changed successfully!", "success");
+      setModal(null);
+      setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setPwError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await api.deleteAdmin(deleteTarget.admin_id);
+      showToast("Admin removed.", "success");
+      setDeleteTarget(null);
+      refreshAdmins();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-20">
+      <div className="w-8 h-8 border-2 border-[#ff2d9b] border-t-transparent rounded-full animate-spin" />
+    </div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Change your own password */}
+      <div className="bg-[#0d0d3b] border border-[#00f5ff]/10 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-white font-bold">Your Account</h3>
+          <button
+            onClick={() => { setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" }); setPwError(""); setModal("password"); }}
+            className="px-4 py-2 text-xs border border-[#00f5ff]/30 text-[#00f5ff] rounded-lg hover:bg-[#00f5ff]/10 transition"
+          >
+            Change Password
+          </button>
+        </div>
+        <p className="text-gray-400 text-sm">{currentAdmin?.name} · {currentAdmin?.email}</p>
+      </div>
+
+      {/* Admin list */}
+      <div className="bg-[#0d0d3b] border border-[#00f5ff]/10 rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+          <h3 className="text-white font-bold">All Admins</h3>
+          <button
+            onClick={() => { setNewAdminForm({ name: "", email: "", password: "" }); setModal("add"); }}
+            className="px-4 py-2 bg-[#ff2d9b] text-white text-xs font-semibold rounded-lg hover:bg-[#e91e8c] transition"
+          >
+            + Add Admin
+          </button>
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="bg-[#0a0a2e] text-xs text-gray-500 uppercase tracking-wider">
+              <th className="px-5 py-3 text-left">Name</th>
+              <th className="px-5 py-3 text-left">Email</th>
+              <th className="px-5 py-3 text-left">Added</th>
+              <th className="px-5 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {admins.map((a, i) => (
+              <tr key={a.admin_id} className={`border-t border-white/5 ${i % 2 === 0 ? "bg-[#0d0d3b]" : "bg-[#0a0a2e]"}`}>
+                <td className="px-5 py-3 text-white text-sm font-medium">
+                  {a.name}
+                  {a.admin_id === currentAdmin?.id && (
+                    <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-[#00f5ff]/10 text-[#00f5ff]">You</span>
+                  )}
+                </td>
+                <td className="px-5 py-3 text-gray-400 text-sm">{a.email}</td>
+                <td className="px-5 py-3 text-gray-400 text-sm">{new Date(a.created_at).toLocaleDateString()}</td>
+                <td className="px-5 py-3 text-right">
+                  {a.admin_id !== currentAdmin?.id && (
+                    <button onClick={() => setDeleteTarget(a)} className="px-3 py-1 text-xs border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/10 transition">
+                      Remove
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add admin modal */}
+      {modal === "add" && (
+        <ModalWrapper title="Add New Admin" onClose={() => setModal(null)}>
+          <Field label="Full Name">
+            <Input value={newAdminForm.name} onChange={(e) => setNewAdminForm({ ...newAdminForm, name: e.target.value })} placeholder="e.g. Jane Doe" />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={newAdminForm.email} onChange={(e) => setNewAdminForm({ ...newAdminForm, email: e.target.value })} placeholder="jane@theshowroom.com" />
+          </Field>
+          <Field label="Password">
+            <Input type="password" value={newAdminForm.password} onChange={(e) => setNewAdminForm({ ...newAdminForm, password: e.target.value })} placeholder="Min 8 characters" />
+          </Field>
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleAddAdmin} disabled={saving} className="flex-1 py-2.5 bg-[#ff2d9b] text-white rounded-xl text-sm font-semibold hover:bg-[#e91e8c] transition disabled:opacity-60">
+              {saving ? "Creating..." : "Create Admin"}
+            </button>
+            <button onClick={() => setModal(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition">Cancel</button>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {/* Change password modal */}
+      {modal === "password" && (
+        <ModalWrapper title="Change Password" onClose={() => setModal(null)}>
+          {pwError && (
+            <div className="px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">{pwError}</div>
+          )}
+          <Field label="Current Password">
+            <Input type="password" value={pwForm.currentPassword} onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })} />
+          </Field>
+          <Field label="New Password">
+            <Input type="password" value={pwForm.newPassword} onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })} placeholder="Min 8 characters" />
+          </Field>
+          <Field label="Confirm New Password">
+            <Input type="password" value={pwForm.confirmPassword} onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })} />
+          </Field>
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleChangePassword} disabled={saving} className="flex-1 py-2.5 bg-[#ff2d9b] text-white rounded-xl text-sm font-semibold hover:bg-[#e91e8c] transition disabled:opacity-60">
+              {saving ? "Updating..." : "Update Password"}
+            </button>
+            <button onClick={() => setModal(null)} className="flex-1 py-2.5 border border-white/10 text-gray-300 rounded-xl text-sm hover:bg-white/5 transition">Cancel</button>
+          </div>
+        </ModalWrapper>
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirm name={deleteTarget.name} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
+      )}
+    </div>
+  );
+}
+
 // ── Root Admin Component ──────────────────────────────────────────────────────
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -987,12 +1202,21 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { admin, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    window.location.href = "/admin/login";
+  };
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
+  // ── Reusable fetch function — safe to call from event handlers ─────────────
+  // ── (button clicks, refresh callbacks passed to children), just NOT ─────────
+  // ── directly inside a useEffect body.
   const fetchAll = () => {
     setLoading(true);
     Promise.all([api.getManufacturers(), api.getCars(), api.getFeatures()])
@@ -1001,13 +1225,34 @@ export default function Admin() {
       .finally(() => setLoading(false));
   };
 
+  // ── Mount-time fetch — logic lives directly inside the effect, all setState ──
+  // ── calls happen inside the promise callbacks (subscribing to the fetch ────
+  // ── result), not synchronously in the effect body itself. ──────────────────
   useEffect(() => {
-    // eslint-disable-next-line
-    fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+
+    Promise.all([api.getManufacturers(), api.getCars(), api.getFeatures()])
+      .then(([m, c, f]) => {
+        if (cancelled) return;
+        setManufacturers(m);
+        setCars(c);
+        setFeatures(f);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        showToast(err.message, "error");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const panelTitle = { dashboard: "Dashboard", manufacturers: "Manufacturers", cars: "Cars", features: "Features", messages: "Messages" };
+  const panelTitle = { dashboard: "Dashboard", manufacturers: "Manufacturers", cars: "Cars", features: "Features", messages: "Messages", admins: "Admins" };
 
   if (loading) {
     return (
@@ -1026,7 +1271,8 @@ export default function Admin() {
           <p className="text-xs text-gray-500 uppercase tracking-widest">Admin Panel</p>
           <p className="text-white font-bold mt-0.5">The Showroom</p>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
+
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {menuItems.map((item) => (
             <button key={item.id} onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition
@@ -1036,8 +1282,25 @@ export default function Admin() {
             </button>
           ))}
         </nav>
-        <div className="px-5 py-4 border-t border-white/5">
-          <p className="text-xs text-gray-600">{manufacturers.length} manufacturers · {cars.length} cars</p>
+
+        <div className="border-t border-white/5 bg-[#05051a]">
+          <div className="px-5 py-3 border-b border-white/5">
+            <p className="text-xs text-gray-600">{manufacturers.length} manufacturers · {cars.length} cars</p>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            <div className="min-w-0">
+              <p className="text-white text-xs font-medium truncate">{admin?.name}</p>
+              <p className="text-gray-600 text-xs truncate">{admin?.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full py-2 border border-red-500/30 text-red-400 rounded-lg text-xs
+                         hover:bg-red-500/10 transition"
+            >
+              Log Out
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1063,6 +1326,7 @@ export default function Admin() {
           {activeTab === "cars" && <Cars data={cars} manufacturers={manufacturers} refresh={fetchAll} showToast={showToast} />}
           {activeTab === "features" && <Features data={features} refresh={fetchAll} showToast={showToast} />}
           {activeTab === "messages" && <Messages showToast={showToast} />}
+          {activeTab === "admins" && <AdminsPanel showToast={showToast} />}
         </div>
       </div>
 

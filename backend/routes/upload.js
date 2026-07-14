@@ -2,16 +2,18 @@ const express = require("express");
 const router = express.Router();
 const upload = require("../middleware/upload");
 const pool = require("../database/database");
+const { requireAuth } = require("../middleware/auth");
+
 
 // POST — upload a single main image, returns its URL (not yet attached to a car)
-router.post("/main", upload.single("image"), (req, res) => {
+router.post("/main",requireAuth, upload.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded." });
   const url = `/uploads/cars/${req.file.filename}`;
   res.json({ url });
 });
 
 // POST — upload multiple carousel images, returns array of URLs
-router.post("/carousel", upload.array("images", 10), (req, res) => {
+router.post("/carousel",requireAuth, upload.array("images", 10), (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: "No files uploaded." });
   }
@@ -20,7 +22,7 @@ router.post("/carousel", upload.array("images", 10), (req, res) => {
 });
 
 // POST — attach carousel image URLs to an existing car
-router.post("/cars/:carId/images", async (req, res, next) => {
+router.post("/cars/:carId/images",requireAuth, async (req, res, next) => {
   try {
     const { urls } = req.body; // array of image URLs
     if (!Array.isArray(urls) || urls.length === 0) {
@@ -54,7 +56,7 @@ router.get("/cars/:carId/images", async (req, res, next) => {
 });
 
 // DELETE — remove a single carousel image
-router.delete("/cars/:carId/images/:imageId", async (req, res, next) => {
+router.delete("/cars/:carId/images/:imageId",requireAuth, async (req, res, next) => {
   try {
     const [result] = await pool.query(
       `DELETE FROM car_images WHERE image_id = ? AND car_id = ?`,

@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../database/database");
+const { requireAuth } = require("../middleware/auth");
 
 // GET all
 router.get("/", async (req, res, next) => {
@@ -25,7 +26,7 @@ router.get("/:id", async (req, res, next) => {
 });
 
 // POST
-router.post("/", async (req, res, next) => {
+router.post("/",requireAuth, async (req, res, next) => {
   try {
     const { name, country, founded_year } = req.body;
     if (!name || !country || !founded_year) {
@@ -46,7 +47,7 @@ router.post("/", async (req, res, next) => {
 });
 
 // PUT
-router.put("/:id", async (req, res, next) => {
+router.put("/:id",requireAuth, async (req, res, next) => {
   try {
     const [existingRows] = await pool.query(
       `SELECT * FROM manufacturers WHERE manufacturer_id = ?`,
@@ -71,7 +72,7 @@ router.put("/:id", async (req, res, next) => {
 });
 
 // DELETE — cascades via FK ON DELETE CASCADE
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id",requireAuth, async (req, res, next) => {
   try {
     const [result] = await pool.query(
       `DELETE FROM manufacturers WHERE manufacturer_id = ?`,

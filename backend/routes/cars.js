@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../database/database");
-
+const { requireAuth } = require("../middleware/auth");
 
 
 // ── Helper: full car with joins ─────────────────────────────────────────────
@@ -72,7 +72,7 @@ router.get("/:id", async (req, res, next) => {
 });
 
 // POST — create car + spec + features (transaction)
-router.post("/", async (req, res, next) => {
+router.post("/",requireAuth, async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     const {
@@ -126,7 +126,7 @@ router.post("/", async (req, res, next) => {
 });
 
 // PUT — update car
-router.put("/:id", async (req, res, next) => {
+router.put("/:id",requireAuth, async (req, res, next) => {
   try {
     const [existingRows] = await pool.query(`SELECT * FROM cars WHERE car_id = ?`, [req.params.id]);
     if (existingRows.length === 0) return res.status(404).json({ error: "Car not found." });
@@ -159,7 +159,7 @@ router.put("/:id", async (req, res, next) => {
 });
 
 // DELETE — cascades via FK
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id",requireAuth, async (req, res, next) => {
   try {
     const [result] = await pool.query(`DELETE FROM cars WHERE car_id = ?`, [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: "Car not found." });
@@ -168,7 +168,7 @@ router.delete("/:id", async (req, res, next) => {
 });
 
 // POST — attach feature
-router.post("/:id/features/:featureId", async (req, res, next) => {
+router.post("/:id/features/:featureId", requireAuth, async (req, res, next) => {
   try {
     await pool.query(
       `INSERT IGNORE INTO car_features (car_id, feature_id) VALUES (?, ?)`,
@@ -179,7 +179,7 @@ router.post("/:id/features/:featureId", async (req, res, next) => {
 });
 
 // DELETE — remove feature
-router.delete("/:id/features/:featureId", async (req, res, next) => {
+router.delete("/:id/features/:featureId",requireAuth, async (req, res, next) => {
   try {
     await pool.query(
       `DELETE FROM car_features WHERE car_id = ? AND feature_id = ?`,
@@ -190,7 +190,7 @@ router.delete("/:id/features/:featureId", async (req, res, next) => {
 });
 
 // PUT — update specification for a car
-router.put("/:id/specification", async (req, res, next) => {
+router.put("/:id/specification",requireAuth, async (req, res, next) => {
   try {
     const { engine, horsepower, torque, drivetrain, fuel_economy, acceleration, top_speed, seating, weight } = req.body;
 

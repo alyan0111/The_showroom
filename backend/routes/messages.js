@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../database/database");
+const { requireAuth } = require("../middleware/auth");
 
-router.get("/", async (req, res, next) => {
+
+router.get("/",requireAuth, async (req, res, next) => {
   try {
     const [rows] = await pool.query(`SELECT * FROM messages ORDER BY created_at DESC`);
     res.json(rows);
@@ -33,7 +35,7 @@ router.post("/", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.patch("/:id/read", async (req, res, next) => {
+router.patch("/:id/read",requireAuth, async (req, res, next) => {
   try {
     const [result] = await pool.query(
       `UPDATE messages SET is_read = TRUE WHERE message_id = ?`,
@@ -46,7 +48,7 @@ router.patch("/:id/read", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id",requireAuth, async (req, res, next) => {
   try {
     const [result] = await pool.query(`DELETE FROM messages WHERE message_id = ?`, [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ error: "Message not found." });
