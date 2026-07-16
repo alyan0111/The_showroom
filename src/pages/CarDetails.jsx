@@ -74,19 +74,29 @@ function CarCarousel({ images }) {
 export default function CarDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [car, setCar]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+
+  // ── State keyed together so a single setState transition happens per outcome ──
+  const [state, setState] = useState({ status: "loading", car: null, error: null });
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+
     api.getCar(id)
-      .then(setCar)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (cancelled) return;
+        setState({ status: "success", car: data, error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState({ status: "error", car: null, error: err.message });
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  if (loading) {
+  if (state.status === "loading") {
     return (
       <div className="pt-32 min-h-screen bg-[#0a0a2e] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-[#ff2d9b] border-t-transparent rounded-full animate-spin" />
@@ -94,13 +104,13 @@ export default function CarDetails() {
     );
   }
 
-  if (error || !car) {
+  if (state.status === "error" || !state.car) {
     return (
       <div className="pt-20 min-h-screen bg-[#0a0a2e] flex flex-col items-center justify-center text-center px-4">
         <p className="text-6xl mb-4">🚗</p>
         <h2 className="text-2xl font-bold text-white mb-2">Car Not Found</h2>
         <p className="text-gray-400 mb-6">
-          {error || "The car you're looking for doesn't exist in our database."}
+          {state.error || "The car you're looking for doesn't exist in our database."}
         </p>
         <Link to="/cars" className="px-6 py-2 bg-[#ff2d9b] text-white rounded-lg hover:bg-[#e91e8c] transition">
           Back to Explore
@@ -109,10 +119,9 @@ export default function CarDetails() {
     );
   }
 
+  const car = state.car;
   const spec = car.specification || {};
 
-  // ── Build carousel images: prefer full gallery from car_images table, ───────
-  // ── fall back to the single main card image, then to a placeholder ─────────
   const images =
     car.images && car.images.length > 0
       ? car.images.map((img) => resolveUrl(img.image_url))

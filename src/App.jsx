@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import QueryMonitor from "./components/QueryMonitor";   // ← NEW
 import Home from "./pages/Home";
 import Cars from "./pages/Cars";
 import CarDetails from "./pages/CarDetails";
@@ -40,6 +41,7 @@ function App() {
             </Routes>
           </main>
           <Footer />
+          <QueryMonitor /> 
         </div>
       </BrowserRouter>
     </AuthProvider>

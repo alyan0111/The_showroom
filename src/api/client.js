@@ -57,6 +57,9 @@ async function uploadRequest(endpoint, formData) {
 }
 
 export const api = {
+getQueryLogs: () => request("/query-logs"),
+clearQueryLogs: () => request("/query-logs", { method: "DELETE" }),
+
   getManufacturers: () => request("/manufacturers"),
   createManufacturer: (data) => request("/manufacturers", { method: "POST", body: JSON.stringify(data) }),
   updateManufacturer: (id, data) => request(`/manufacturers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
