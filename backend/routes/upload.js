@@ -3,7 +3,33 @@ const router = express.Router();
 const upload = require("../middleware/upload");
 const pool = require("../database/database");
 const { requireAuth } = require("../middleware/auth");
+const fs = require("fs");
+const path = require("path");
 
+async function deleteUploadedFile(imageUrl) {
+  if (!imageUrl) return;
+
+  const filename = path.basename(imageUrl);
+  const filePath = path.join(
+    __dirname,
+    "..",
+    "uploads",
+    "cars",
+    filename
+  );
+
+  try {
+    await fs.promises.unlink(filePath);
+    console.log(`Deleted image file: ${filePath}`);
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+
+    // The DB may reference a file that is already missing.
+    console.warn(`Image file already missing: ${filePath}`);
+  }
+}
 
 // POST — upload a single main image, returns its URL (not yet attached to a car)
 router.post("/main",requireAuth, upload.single("image"), (req, res) => {
@@ -55,14 +81,28 @@ router.get("/cars/:carId/images", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE — remove a single carousel image
-router.delete("/cars/:carId/images/:imageId",requireAuth, async (req, res, next) => {
+// DELETE — remove a single carousel image (both DB row and physical file)
+router.delete("/cars/:carId/images/:imageId", requireAuth, async (req, res, next) => {
   try {
-    const [result] = await pool.query(
+    // Fetch the image_url BEFORE deleting the row
+    const [rows] = await pool.query(
+      `SELECT image_url FROM car_images WHERE image_id = ? AND car_id = ?`,
+      [req.params.imageId, req.params.carId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Image not found." });
+    }
+
+    // Delete the file from disk
+    deleteUploadedFile(rows[0].image_url);
+
+    // Delete the DB row
+    await pool.query(
       `DELETE FROM car_images WHERE image_id = ? AND car_id = ?`,
       [req.params.imageId, req.params.carId]
     );
-    if (result.affectedRows === 0) return res.status(404).json({ error: "Image not found." });
+
     res.status(204).send();
   } catch (err) { next(err); }
 });

@@ -83,7 +83,7 @@ function FilterPanel({ search, setSearch, filters, handleFilter, resetFilters, m
         <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">
           Max Price: <span className="text-[#00f5ff]">${filters.max_price.toLocaleString()}</span>
         </label>
-        <input type="range" min={10000} max={120000} step={5000} value={filters.max_price}
+        <input type="range" min={10000} max={10000000} step={5000} value={filters.max_price}
           onChange={(e) => handleFilter("max_price", Number(e.target.value))}
           className="w-full accent-[#00f5ff]" />
       </div>
@@ -92,10 +92,10 @@ function FilterPanel({ search, setSearch, filters, handleFilter, resetFilters, m
         <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">
           Year: <span className="text-[#00f5ff]">{filters.min_year} – {filters.max_year}</span>
         </label>
-        <input type="range" min={2010} max={2024} value={filters.min_year}
+        <input type="range" min={2010} max={2025} value={filters.min_year}
           onChange={(e) => handleFilter("min_year", Number(e.target.value))}
           className="w-full accent-[#ff2d9b]" />
-        <input type="range" min={2010} max={2024} value={filters.max_year}
+        <input type="range" min={2010} max={2025} value={filters.max_year}
           onChange={(e) => handleFilter("max_year", Number(e.target.value))}
           className="w-full accent-[#ff2d9b] mt-1" />
       </div>
@@ -122,8 +122,8 @@ export default function Cars() {
     body_type: "All",
     transmission: "All",
     min_year: 2010,
-    max_year: 2024,
-    max_price: 120000,
+    max_year: 2025,
+    max_price: 10000000,
   });
 
   // ── Fetch manufacturers for the filter list ──────────────────────────────────
@@ -172,7 +172,7 @@ export default function Cars() {
   const resetFilters = () => {
     setFilters({
       manufacturer: "All", engine_type: "All", body_type: "All",
-      transmission: "All", min_year: 2010, max_year: 2024, max_price: 120000,
+      transmission: "All", min_year: 2010, max_year: 2025, max_price: 10000000,
     });
     setSearch("");
   };
@@ -199,7 +199,7 @@ export default function Cars() {
         </button>
 
         <aside className="hidden md:block w-64 shrink-0">
-          <div className="bg-[#0d0d3b] border border-[#00f5ff]/10 rounded-xl p-5 sticky top-24">
+          <div className="bg-[#0d0d3b] border border-[#00f5ff]/10 rounded-xl p-5 sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto filter-scroll">
             <h2 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Filters</h2>
             <FilterPanel search={search} setSearch={setSearch} filters={filters} handleFilter={handleFilter} resetFilters={resetFilters} manufacturers={manufacturers} />
           </div>
@@ -207,7 +207,7 @@ export default function Cars() {
 
         {sidebarOpen && (
           <div className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm">
-            <div className="absolute right-0 top-0 h-full w-80 bg-[#0d0d3b] border-l border-[#00f5ff]/10 p-6 overflow-y-auto">
+            <div className="absolute right-0 top-0 h-full w-80 bg-[#0d0d3b] border-l border-[#00f5ff]/10 p-6 overflow-y-auto filter-scroll">
               <h2 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Filters</h2>
               <FilterPanel search={search} setSearch={setSearch} filters={filters} handleFilter={handleFilter} resetFilters={resetFilters} manufacturers={manufacturers} />
             </div>
@@ -233,7 +233,7 @@ export default function Cars() {
 
           {!loading && !error && cars.length === 0 && (
             <div className="text-center flex flex-col items-center text-gray-500 py-20">
-              <img src={logo} alt="Logo" className="max-w-80 max-h-80 object-cover" />
+              <img src={logo} alt="Logo" className="w-48 mb-4" />
               <p className="text-lg">No cars match your filters.</p>
               <button onClick={resetFilters} className="mt-4 text-[#00f5ff] hover:underline text-sm">
                 Reset filters

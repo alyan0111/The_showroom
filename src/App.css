@@ -1,11 +1,27 @@
 @import url("https://fonts.googleapis.com/css2?family=Roboto&display=swap");
 @import "tailwindcss";
+
+:root {
+  --font-roboto: "Roboto", sans-serif;
+}
+
 canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
 }
 
-@theme {
-  --font-roboto: "Roboto", sans-serif; 
+/* Themed scrollbar for filter panel */
+.filter-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.filter-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.filter-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 245, 255, 0.3);
+  border-radius: 3px;
+}
+.filter-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 245, 255, 0.6);
 }

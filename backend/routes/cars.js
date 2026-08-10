@@ -1,8 +1,36 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs");
+const path = require("path");
 const pool = require("../database/database");
 const { requireAuth } = require("../middleware/auth");
 
+
+// ── Helper: safely delete a file from the uploads folder ───────────────────────
+async function deleteUploadedFile(imageUrl) {
+  if (!imageUrl) return;
+
+  const filename = path.basename(imageUrl);
+  const filePath = path.join(
+    __dirname,
+    "..",
+    "uploads",
+    "cars",
+    filename
+  );
+
+  try {
+    await fs.promises.unlink(filePath);
+    console.log(`Deleted image file: ${filePath}`);
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+
+    // The DB may reference a file that is already missing.
+    console.warn(`Image file already missing: ${filePath}`);
+  }
+}
 
 // ── Helper: full car with joins ─────────────────────────────────────────────
 async function getFullCar(carId) {
@@ -126,7 +154,7 @@ router.post("/",requireAuth, async (req, res, next) => {
 });
 
 // PUT — update car
-router.put("/:id",requireAuth, async (req, res, next) => {
+router.put("/:id", requireAuth, async (req, res, next) => {
   try {
     const [existingRows] = await pool.query(`SELECT * FROM cars WHERE car_id = ?`, [req.params.id]);
     if (existingRows.length === 0) return res.status(404).json({ error: "Car not found." });
@@ -136,6 +164,12 @@ router.put("/:id",requireAuth, async (req, res, next) => {
       manufacturer_id, model, year, price, body_type,
       engine_type, transmission, image_url,
     } = req.body;
+
+    // If a new image_url is being set AND it's different from the old one,
+    // delete the old file since it's about to become orphaned
+    if (image_url && image_url !== existing.image_url) {
+      deleteUploadedFile(existing.image_url);
+    }
 
     await pool.query(`
       UPDATE cars SET
@@ -158,14 +192,110 @@ router.put("/:id",requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE — cascades via FK
-router.delete("/:id",requireAuth, async (req, res, next) => {
+// DELETE — cascades to specifications and car_features via FK, 
+// but files must be cleaned up manually BEFORE the DB rows disappear
+router.delete("/:id", requireAuth, async (req, res, next) => {
+  const conn = await pool.getConnection();
+
   try {
-    const [result] = await pool.query(`DELETE FROM cars WHERE car_id = ?`, [req.params.id]);
-    if (result.affectedRows === 0) return res.status(404).json({ error: "Car not found." });
-    res.status(204).send();
-  } catch (err) { next(err); }
+    const carId = req.params.id;
+
+    const [carRows] = await conn.query(
+      `SELECT image_url
+       FROM cars
+       WHERE car_id = ?`,
+      [carId]
+    );
+
+    if (carRows.length === 0) {
+      conn.release();
+      return res.status(404).json({
+        error: "Car not found.",
+      });
+    }
+
+    const [imageRows] = await conn.query(
+      `SELECT image_url
+       FROM car_images
+       WHERE car_id = ?`,
+      [carId]
+    );
+
+    /*
+      The seeder may store the main image in both:
+      1. cars.image_url
+      2. car_images.image_url
+
+      Set removes duplicate URLs, preventing the same file from being
+      deleted twice.
+    */
+    const imageUrls = [
+      ...new Set([
+        carRows[0].image_url,
+        ...imageRows.map((image) => image.image_url),
+      ].filter(Boolean)),
+    ];
+
+    await conn.beginTransaction();
+
+    /*
+      specifications, car_features, and car_images should be removed
+      automatically through ON DELETE CASCADE.
+    */
+    const [result] = await conn.query(
+      `DELETE FROM cars WHERE car_id = ?`,
+      [carId]
+    );
+
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      conn.release();
+
+      return res.status(404).json({
+        error: "Car not found.",
+      });
+    }
+
+    await conn.commit();
+    conn.release();
+
+    /*
+      Delete files after the database transaction succeeds.
+
+      If one physical file cannot be deleted, the car is still removed
+      from the database and the failure is logged without returning a
+      misleading 500 response to the frontend.
+    */
+    const fileDeletionResults = await Promise.allSettled(
+      imageUrls.map((url) => deleteUploadedFile(url))
+    );
+
+    fileDeletionResults.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.error(
+          `Failed to delete image ${imageUrls[index]}:`,
+          result.reason.message
+        );
+      }
+    });
+
+    return res.status(200).json({
+      message: "Car deleted successfully.",
+      deleted_car_id: Number(carId),
+      image_files_processed: imageUrls.length,
+    });
+  } catch (err) {
+    try {
+      await conn.rollback();
+    } catch {
+      // Transaction may not have started.
+    }
+
+    conn.release();
+    next(err);
+  }
 });
+
 
 // POST — attach feature
 router.post("/:id/features/:featureId", requireAuth, async (req, res, next) => {

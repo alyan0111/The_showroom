@@ -1,55 +1,80 @@
 import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { api } from "../api/client";
 
 const technologies = [
-  { name: "React",         icon: "⚛️",  desc: "Frontend UI library for building component-based interfaces." },
-  { name: "Redux",         icon: "🔄",  desc: "Global state management for filters, comparisons, and cart." },
-  { name: "Tailwind CSS",  icon: "🎨",  desc: "Utility-first CSS framework for rapid, consistent styling." },
+  { name: "React",         icon: "⚛️",  desc: "Frontend UI library powering all 7+ pages of the platform." },
   { name: "React Router",  icon: "🧭",  desc: "Client-side routing for seamless SPA navigation." },
-  { name: "SQL Database",  icon: "🗄️",  desc: "Relational database storing cars, specs, features, and manufacturers." },
+  { name: "Tailwind CSS",  icon: "🎨",  desc: "Utility-first CSS framework for the dark neon design system." },
   { name: "Three.js",      icon: "🌐",  desc: "WebGL-powered 3D animation for the Hyperspeed hero background." },
+  { name: "Express.js",    icon: "🚀",  desc: "REST API backend serving all car, manufacturer, and feature data." },
+  { name: "MySQL",         icon: "🗄️",  desc: "Normalized relational database with 8 tables and full FK constraints." },
+  { name: "JWT + bcrypt",  icon: "🔐",  desc: "Token-based admin authentication with hashed passwords." },
+  { name: "Multer",        icon: "📸",  desc: "Handles main image and carousel gallery uploads for every car." },
+  { name: "Embla Carousel",icon: "🎠",  desc: "Touch-friendly image carousel on the Car Details page." },
 ];
 
 const timeline = [
-  { year: "2010", label: "Coverage Starts",    desc: "The Showroom catalogs every major vehicle released from 2010 onward." },
-  { year: "2015", label: "EV Expansion",       desc: "Electric and hybrid vehicles added as adoption accelerated globally." },
-  { year: "2020", label: "Performance Era",    desc: "High-performance and limited-edition models given dedicated profiles." },
-  { year: "2023", label: "Platform Launch",    desc: "The Showroom goes live with 200+ vehicles across 30+ manufacturers." },
-  { year: "2024", label: "Compare Feature",    desc: "Side-by-side comparison tool launched with smart BEST-value detection." },
+  { year: "Phase 1", label: "UI & Hyperspeed Background",  desc: "React + Tailwind scaffold with a Three.js WebGL animated hero section." },
+  { year: "Phase 2", label: "Core Pages Built",             desc: "Home, Explore, Car Details, Compare, About, and Contact fully designed." },
+  { year: "Phase 3", label: "MySQL Database Design",        desc: "Normalized 8-table schema built and reverse-engineered in MySQL Workbench." },
+  { year: "Phase 4", label: "REST API + Live Data",         desc: "Express backend wired to every page, replacing all hardcoded mock data." },
+  { year: "Phase 5", label: "Image Uploads",                desc: "Multer integration for main card images and full carousel galleries." },
+  { year: "Phase 6", label: "Admin Authentication",         desc: "JWT + bcrypt secured Admin Panel with full CRUD for every entity." },
+  { year: "Phase 7", label: "Live Query Monitor",           desc: "Real-time floating panel showing every SQL query hitting the database." },
 ];
 
-const teamStats = [
-  { value: "200+", label: "Cars Listed"       },
-  { value: "30+",  label: "Manufacturers"     },
-  { value: "40+",  label: "Electric Models"   },
-  { value: "7",    label: "Pages Built"       },
-];
-
+// ── Real ER Schema — matches the actual MySQL database ─────────────────────────
 const erEntities = [
   {
-    name: "Manufacturer",
+    name: "manufacturers",
     color: "#ff2d9b",
     fields: ["manufacturer_id (PK)", "name", "country", "founded_year"],
   },
   {
-    name: "Car",
+    name: "cars",
     color: "#00f5ff",
-    fields: ["car_id (PK)", "manufacturer_id (FK)", "model", "year", "price", "body_type"],
+    fields: ["car_id (PK)", "manufacturer_id (FK)", "model", "year", "price", "body_type", "engine_type", "transmission", "image_url"],
   },
   {
-    name: "Specification",
+    name: "specifications",
     color: "#7b2ff7",
-    fields: ["spec_id (PK)", "car_id (FK)", "engine", "horsepower", "torque", "drivetrain", "fuel_economy"],
+    fields: ["spec_id (PK)", "car_id (FK)", "engine", "horsepower", "torque", "drivetrain", "fuel_economy", "acceleration", "top_speed", "seating", "weight"],
   },
   {
-    name: "Feature",
+    name: "car_images",
+    color: "#00f5ff",
+    fields: ["image_id (PK)", "car_id (FK)", "image_url", "is_primary", "sort_order"],
+  },
+  {
+    name: "features",
     color: "#ff2d9b",
     fields: ["feature_id (PK)", "name", "category"],
   },
   {
-    name: "Car_Feature",
-    color: "#00f5ff",
+    name: "car_features",
+    color: "#7b2ff7",
     fields: ["car_id (FK)", "feature_id (FK)"],
   },
+  {
+    name: "messages",
+    color: "#00f5ff",
+    fields: ["message_id (PK)", "name", "email", "subject", "message", "is_read"],
+  },
+  {
+    name: "admins",
+    color: "#ff2d9b",
+    fields: ["admin_id (PK)", "email", "password_hash", "name"],
+  },
+];
+
+const relationships = [
+  { rel: "Manufacturer → Car",        type: "One-to-Many",  desc: "One manufacturer produces many car models." },
+  { rel: "Car → Specification",       type: "One-to-Many",  desc: "Each car links to its own specification record." },
+  { rel: "Car → Car_Images",          type: "One-to-Many",  desc: "Each car has a main image plus a full carousel gallery." },
+  { rel: "Car ↔ Feature",             type: "Many-to-Many", desc: "Resolved via car_features — cars have many features; features belong to many cars." },
+  { rel: "Feature → Category",        type: "Grouped by",   desc: "Features grouped as Safety, Comfort, or Technology." },
+  { rel: "Admin → Cars / Features",   type: "Manages",      desc: "Authenticated admins perform full CRUD across every entity." },
 ];
 
 // ── Section Heading ───────────────────────────────────────────────────────────
@@ -68,12 +93,44 @@ function SectionHeading({ title, subtitle }) {
 }
 
 export default function About() {
+  // ── Live stats pulled from the real API — no more hardcoded placeholders ──
+  const [stats, setStats] = useState({ cars: 0, manufacturers: 0, features: 0, electric: 0 });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([api.getManufacturers(), api.getCars(), api.getFeatures()])
+      .then(([manufacturers, cars, features]) => {
+        if (cancelled) return;
+        setStats({
+          cars: cars.length,
+          manufacturers: manufacturers.length,
+          features: features.length,
+          electric: cars.filter((c) => c.engine_type === "Electric").length,
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        setStatsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  const teamStats = [
+    { value: statsLoading ? "—" : stats.cars,          label: "Cars Listed"    },
+    { value: statsLoading ? "—" : stats.manufacturers, label: "Manufacturers"  },
+    { value: statsLoading ? "—" : stats.electric,      label: "Electric Models"},
+    { value: "8",                                      label: "Database Tables"},
+  ];
+
   return (
     <div className="pt-20 min-h-screen bg-[#0a0a2e]">
 
       {/* ── Hero Banner ──────────────────────────────────────────────────────── */}
       <div className="relative bg-[#05051a] border-b border-[#ff2d9b]/20 overflow-hidden">
-        {/* Background glow */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-[-80px] left-1/2 -translate-x-1/2 w-[600px] h-[600px]
                           bg-[#ff2d9b]/5 rounded-full blur-3xl" />
@@ -90,18 +147,19 @@ export default function About() {
             Built for Car Enthusiasts.<br />
             <span className="bg-gradient-to-r from-[#ff2d9b] to-[#00f5ff]
                              bg-clip-text text-transparent">
-              Powered by Data.
+              Powered by a Real Database.
             </span>
           </h1>
           <p className="text-gray-400 text-lg leading-relaxed max-w-2xl mx-auto">
-            The Showroom is a modern, data-driven vehicle showcase platform built as an
-            academic project. It combines a relational database backend with a futuristic
-            React frontend to deliver a premium car browsing and comparison experience.
+            The Showroom is a full-stack vehicle showcase platform built as an academic
+            Complex Engineering Problem. It combines a normalized MySQL database, a
+            secured Express REST API, and a futuristic React frontend to deliver a
+            complete car browsing, comparison, and admin management experience.
           </p>
         </div>
       </div>
 
-      {/* ── Stats Strip ──────────────────────────────────────────────────────── */}
+      {/* ── Stats Strip — LIVE from the database ────────────────────────────── */}
       <div className="bg-[#05051a] border-b border-[#ff2d9b]/10">
         <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4
                         divide-x divide-y md:divide-y-0 divide-[#ff2d9b]/10 text-center">
@@ -112,6 +170,9 @@ export default function About() {
             </div>
           ))}
         </div>
+        <p className="text-center text-gray-600 text-xs pb-4">
+          Live figures pulled directly from the MySQL database via the REST API
+        </p>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-20 space-y-24">
@@ -122,12 +183,12 @@ export default function About() {
             title="Our Mission"
             subtitle="What The Showroom was built to achieve"
           />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {[
               {
                 icon: "🚗",
                 title: "Comprehensive Catalog",
-                desc: "Every major vehicle from 2010 to present, with accurate specifications sourced from manufacturer data.",
+                desc: "Every vehicle sourced from a normalized relational database, with accurate specs and full image galleries.",
                 color: "#ff2d9b",
               },
               {
@@ -139,8 +200,14 @@ export default function About() {
               {
                 icon: "📊",
                 title: "Data Transparency",
-                desc: "All specs, features, and pricing pulled directly from a normalized relational database — no guesswork.",
+                desc: "All specs, features, and pricing pulled live from MySQL — no guesswork, no static mock data.",
                 color: "#7b2ff7",
+              },
+              {
+                icon: "🔐",
+                title: "Secured Admin Access",
+                desc: "JWT-authenticated Admin Panel with full CRUD, image uploads, and a live SQL query monitor.",
+                color: "#ff2d9b",
               },
             ].map((card) => (
               <div
@@ -168,11 +235,10 @@ export default function About() {
         {/* ── Timeline ─────────────────────────────────────────────────────────── */}
         <section>
           <SectionHeading
-            title="Timeline"
-            subtitle="The history of what The Showroom covers"
+            title="Development Timeline"
+            subtitle="How The Showroom was built, phase by phase"
           />
           <div className="relative">
-            {/* Vertical line */}
             <div className="absolute left-6 md:left-1/2 top-0 bottom-0 w-px
                             bg-gradient-to-b from-[#ff2d9b] via-[#7b2ff7] to-[#00f5ff]
                             -translate-x-1/2" />
@@ -185,7 +251,6 @@ export default function About() {
                     ${i % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"}
                     flex-row`}
                 >
-                  {/* Content */}
                   <div className="flex-1 md:text-right pl-16 md:pl-0 md:pr-10
                                   text-left">
                     {i % 2 !== 0 && <div className="hidden md:block" />}
@@ -202,7 +267,6 @@ export default function About() {
                     </div>
                   </div>
 
-                  {/* Dot */}
                   <div className="absolute left-6 md:left-1/2 -translate-x-1/2
                                   w-4 h-4 rounded-full bg-[#ff2d9b]
                                   border-4 border-[#0a0a2e] shadow-[0_0_12px_#ff2d9b]
@@ -218,8 +282,8 @@ export default function About() {
         {/* ── Technologies ─────────────────────────────────────────────────────── */}
         <section>
           <SectionHeading
-            title="Technologies Used"
-            subtitle="The stack powering The Showroom from database to UI"
+            title="Full Stack Used"
+            subtitle="Every layer of The Showroom, from database to UI"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {technologies.map((tech) => (
@@ -242,21 +306,20 @@ export default function About() {
         <section>
           <SectionHeading
             title="Database Schema"
-            subtitle="Entity-Relationship overview of The Showroom's data model"
+            subtitle="All 8 tables in The Showroom's normalized MySQL database"
           />
 
           {/* ER Diagram Visual */}
           <div className="bg-[#0d0d3b] border border-[#00f5ff]/10 rounded-2xl p-8 overflow-x-auto">
-            <div className="flex flex-wrap justify-center gap-6 min-w-[600px]">
+            <div className="flex flex-wrap justify-center gap-6 min-w-[900px]">
               {erEntities.map((entity) => (
                 <div
                   key={entity.name}
-                  className="rounded-xl border overflow-hidden min-w-[160px]"
+                  className="rounded-xl border overflow-hidden min-w-[170px]"
                   style={{ borderColor: `${entity.color}40` }}
                 >
-                  {/* Entity Header */}
                   <div
-                    className="px-4 py-2 text-sm font-bold text-center"
+                    className="px-4 py-2 text-sm font-bold text-center font-mono"
                     style={{
                       backgroundColor: `${entity.color}20`,
                       color: entity.color,
@@ -264,7 +327,6 @@ export default function About() {
                   >
                     {entity.name}
                   </div>
-                  {/* Fields */}
                   <div className="divide-y divide-white/5">
                     {entity.fields.map((field) => (
                       <div
@@ -304,19 +366,14 @@ export default function About() {
                 <span className="text-[#00f5ff]">──</span> One-to-Many
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[#ff2d9b]">⇌</span> Many-to-Many (via Car_Feature)
+                <span className="text-[#ff2d9b]">⇌</span> Many-to-Many (via car_features)
               </div>
             </div>
           </div>
 
           {/* Relationship descriptions */}
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              { rel: "Manufacturer → Car",        type: "One-to-Many",  desc: "One manufacturer produces many car models."              },
-              { rel: "Car → Specification",        type: "One-to-One",   desc: "Each car has exactly one specification record."          },
-              { rel: "Car ↔ Feature",              type: "Many-to-Many", desc: "Cars have many features; features belong to many cars." },
-              { rel: "Feature → Category",         type: "Grouped by",   desc: "Features grouped as Safety, Comfort, or Technology."    },
-            ].map((r) => (
+            {relationships.map((r) => (
               <div
                 key={r.rel}
                 className="bg-[#0a0a2e] border border-[#00f5ff]/10 rounded-xl p-4
@@ -334,6 +391,12 @@ export default function About() {
               </div>
             ))}
           </div>
+
+          <p className="text-center text-gray-500 text-xs mt-6">
+            A formal Chen-notation version of this schema — with entity rectangles,
+            relationship diamonds, and attribute ellipses — is available in the
+            project documentation.
+          </p>
         </section>
 
         {/* ── CTA ──────────────────────────────────────────────────────────────── */}
@@ -344,8 +407,8 @@ export default function About() {
               Ready to explore the collection?
             </h2>
             <p className="text-gray-400 mb-6 text-sm">
-              Browse 200+ vehicles, filter by your preferences, and compare the ones
-              that catch your eye.
+              Browse the catalog, filter by your preferences, and compare the ones
+              that catch your eye — all powered by a real, live database.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link
